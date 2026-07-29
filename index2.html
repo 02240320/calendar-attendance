@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Attendance Tracker</title>
+    <style>
+      :root {
+        --bg-color: #f4f6f9;
+        --card-bg: #ffffff;
+        --primary: #2563eb;
+        --success: #16a34a;
+        --danger: #dc2626;
+        --warning: #d97706;
+        --text: #1f2937;
+        --border: #e5e7eb;
+      }
+
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      body {
+        background: var(--bg-color);
+        color: var(--text);
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+      }
+      @media (max-width: 768px) {
+        .container {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .card {
+        background: var(--card-bg);
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      }
+      h2,
+      h3 {
+        margin-bottom: 15px;
+        color: var(--text);
+      }
+
+      /* Calendar Grid */
+      .calendar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+      }
+      .calendar-grid {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 5px;
+        text-align: center;
+      }
+      .day-name {
+        font-weight: bold;
+        padding: 8px 0;
+        font-size: 0.85rem;
+        color: #6b7280;
+      }
+      .day-cell {
+        padding: 12px 0;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        cursor: pointer;
+        transition: all 0.2s;
+        font-size: 0.9rem;
+      }
+      .day-cell:hover {
+        background: #f3f4f6;
+      }
+      .day-cell.selected {
+        border-color: var(--primary);
+        font-weight: bold;
+        background: #eff6ff;
+      }
+      .day-cell.empty {
+        border: none;
+        cursor: default;
+      }
+
+      /* Calendar Status Coloring */
+      .day-cell.status-locked {
+        background-color: #dcfce7;
+        border-color: var(--success);
+      }
+      .day-cell.status-partial {
+        background-color: #fef3c7;
+        border-color: var(--warning);
+      }
+
+      /* Form Inputs */
+      .add-subject-box {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+      .input-row {
+        display: flex;
+        gap: 8px;
+      }
+      input[type="text"],
+      input[type="time"],
+      select {
+        padding: 10px;
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        font-size: 0.95rem;
+      }
+      input[type="text"] {
+        flex: 2;
+      }
+      input[type="time"] {
+        flex: 1;
+      }
+      select {
+        flex: 1;
+        background: white;
+      }
+      button {
+        padding: 10px 16px;
+        background: var(--primary);
+        color: white;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-weight: 600;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      /* Accordion Subjects */
+      .subject-item {
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        margin-bottom: 10px;
+        overflow: hidden;
+      }
+      .subject-header {
+        padding: 12px;
+        background: #f9fafb;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        cursor: pointer;
+      }
+      .subject-info {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .subject-title {
+        font-weight: 600;
+      }
+      .subject-time {
+        font-size: 0.8rem;
+        color: #6b7280;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+      .subject-body {
+        padding: 12px;
+        display: none;
+        background: white;
+        border-top: 1px solid var(--border);
+      }
+      .subject-item.open .subject-body {
+        display: block;
+      }
+
+      .btn-group {
+        display: flex;
+        gap: 8px;
+      }
+      .status-btn {
+        flex: 1;
+        padding: 10px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+        background: white;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 600;
+      }
+      .status-btn.active-present {
+        background: var(--success);
+        color: white;
+        border-color: var(--success);
+      }
+      .status-btn.active-absent {
+        background: var(--danger);
+        color: white;
+        border-color: var(--danger);
+      }
+
+      .badge {
+        font-size: 0.75rem;
+        padding: 4px 8px;
+        border-radius: 12px;
+        background: #e5e7eb;
+        color: #374151;
+      }
+      .badge.present {
+        background: #dcfce7;
+        color: #166534;
+      }
+      .badge.absent {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      /* Lock Banner & Lock Button */
+      .lock-banner {
+        margin-top: 20px;
+        padding: 12px;
+        background: #fee2e2;
+        border: 1px solid var(--danger);
+        border-radius: 6px;
+        color: var(--danger);
+        font-weight: 600;
+        text-align: center;
+        display: none;
+      }
+      .lock-btn {
+        width: 100%;
+        margin-top: 20px;
+        background: var(--success);
+        padding: 12px;
+        font-size: 1rem;
+      }
+    </style>
+
+    <!-- Firebase Web SDK v10 -->
+    <script type="module">
+      import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+      import {
+        getDatabase,
+        ref,
+        set,
+        onValue,
+      } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+      // 🔑 STEP 1: Paste your exact Firebase configuration keys here
+      const firebaseConfig = {
+        apiKey: "YOUR_API_KEY",
+        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+        databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+        projectId: "YOUR_PROJECT_ID",
+        storageBucket: "YOUR_PROJECT_ID.appspot.com",
+        messagingSenderId: "YOUR_SENDER_ID",
+        appId: "YOUR_APP_ID",
+      };
+
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+
+      let currentDate = new Date();
+      let selectedDateStr = formatDate(currentDate);
+      let subjects = [];
+      let attendanceData = {};
+
+      function formatDate(d) {
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${year}-${month}-${day}`;
+      }
+
+      function formatTime12Hr(time24) {
+        if (!time24) return "";
+        const [h, m] = time24.split(":");
+        let hours = parseInt(h, 10);
+        const suffix = hours >= 12 ? "PM" : "AM";
+        hours = hours % 12 || 12;
+        return `${hours}:${m} ${suffix}`;
+      }
+
+      window.selectDate = function (dateStr) {
+        selectedDateStr = dateStr;
+        renderCalendar();
+        renderSubjectsPanel();
+      };
+
+      window.changeMonth = function (delta) {
+        currentDate.setMonth(currentDate.getMonth() + delta);
+        renderCalendar();
+      };
+
+      window.toggleSubject = function (id) {
+        const el = document.getElementById(`sub-item-${id}`);
+        if (el) el.classList.toggle("open");
+      };
+
+      window.addSubject = async function () {
+        const nameInput = document.getElementById("new-subject-input");
+        const timeInput = document.getElementById("new-subject-time");
+        const daySelect = document.getElementById("new-subject-day");
+
+        const name = nameInput.value.trim();
+        const time = timeInput.value;
+        const dayOfWeek = parseInt(daySelect.value, 10);
+
+        if (!name) return;
+
+        const newSub = {
+          id: "sub_" + Date.now(),
+          name: name,
+          time: time || "",
+          dayOfWeek: dayOfWeek,
+        };
+
+        subjects.push(newSub);
+        nameInput.value = "";
+        timeInput.value = "";
+
+        await set(ref(db, "subjects"), subjects);
+        renderSubjectsPanel();
+      };
+
+      window.markAttendance = async function (subjectId, status) {
+        if (attendanceData[selectedDateStr]?.isLocked) return;
+
+        if (!attendanceData[selectedDateStr]) {
+          attendanceData[selectedDateStr] = { isLocked: false, records: {} };
+        }
+        attendanceData[selectedDateStr].records[subjectId] = status;
+
+        await set(
+          ref(db, `attendance/${selectedDateStr}`),
+          attendanceData[selectedDateStr],
+        );
+        renderSubjectsPanel();
+        renderCalendar();
+      };
+
+      window.lockAttendance = async function () {
+        if (
+          !attendanceData[selectedDateStr] ||
+          Object.keys(attendanceData[selectedDateStr].records || {}).length ===
+            0
+        ) {
+          alert("Please mark attendance for at least one subject first.");
+          return;
+        }
+
+        if (
+          confirm(
+            "Lock attendance for this day? Once locked, entries CANNOT be changed.",
+          )
+        ) {
+          attendanceData[selectedDateStr].isLocked = true;
+          await set(
+            ref(db, `attendance/${selectedDateStr}`),
+            attendanceData[selectedDateStr],
+          );
+          renderSubjectsPanel();
+          renderCalendar();
+        }
+      };
+
+      function initDatabaseSync() {
+        onValue(ref(db, "subjects"), (snapshot) => {
+          subjects = snapshot.val() || [];
+          renderSubjectsPanel();
+        });
+
+        onValue(ref(db, "attendance"), (snapshot) => {
+          attendanceData = snapshot.val() || {};
+          renderCalendar();
+          renderSubjectsPanel();
+        });
+      }
+
+      function renderCalendar() {
+        const grid = document.getElementById("calendar-grid");
+        grid.innerHTML = "";
+
+        const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+        dayNames.forEach((name) => {
+          const div = document.createElement("div");
+          div.className = "day-name";
+          div.innerText = name;
+          grid.appendChild(div);
+        });
+
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        document.getElementById("month-year-title").innerText = new Date(
+          year,
+          month,
+        ).toLocaleString("default", { month: "long", year: "numeric" });
+
+        const firstDayIndex = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        for (let i = 0; i < firstDayIndex; i++) {
+          const emptyCell = document.createElement("div");
+          emptyCell.className = "day-cell empty";
+          grid.appendChild(emptyCell);
+        }
+
+        for (let day = 1; day <= daysInMonth; day++) {
+          const cellDate = new Date(year, month, day);
+          const dateStr = formatDate(cellDate);
+
+          const cell = document.createElement("div");
+          cell.className = "day-cell";
+          cell.innerText = day;
+
+          if (dateStr === selectedDateStr) cell.classList.add("selected");
+
+          const dayRecord = attendanceData[dateStr];
+          if (dayRecord) {
+            if (dayRecord.isLocked) {
+              cell.classList.add("status-locked");
+            } else {
+              cell.classList.add("status-partial");
+            }
+          }
+
+          cell.onclick = () => window.selectDate(dateStr);
+          grid.appendChild(cell);
+        }
+      }
+
+      function renderSubjectsPanel() {
+        document.getElementById("selected-date-display").innerText =
+          selectedDateStr;
+        const listContainer = document.getElementById("subjects-list");
+        listContainer.innerHTML = "";
+
+        const parts = selectedDateStr.split("-");
+        const selectedDayOfWeek = new Date(
+          parts[0],
+          parts[1] - 1,
+          parts[2],
+        ).getDay();
+
+        const filteredSubjects = subjects.filter(
+          (s) => s.dayOfWeek === selectedDayOfWeek,
+        );
+
+        const dayData = attendanceData[selectedDateStr] || {
+          isLocked: false,
+          records: {},
+        };
+        const isLocked = dayData.isLocked;
+
+        const lockBanner = document.getElementById("lock-banner");
+        const lockBtn = document.getElementById("lock-btn");
+
+        if (isLocked) {
+          lockBanner.style.display = "block";
+          lockBtn.style.display = "none";
+        } else {
+          lockBanner.style.display = "none";
+          lockBtn.style.display =
+            filteredSubjects.length > 0 ? "block" : "none";
+        }
+
+        if (filteredSubjects.length === 0) {
+          listContainer.innerHTML =
+            "<p style='color: #6b7280; font-style: italic;'>No classes scheduled for this day of the week.</p>";
+          return;
+        }
+
+        const sortedSubjects = [...filteredSubjects].sort((a, b) => {
+          if (!a.time) return 1;
+          if (!b.time) return -1;
+          return a.time.localeCompare(b.time);
+        });
+
+        sortedSubjects.forEach((sub) => {
+          const item = document.createElement("div");
+          item.className = "subject-item";
+          item.id = `sub-item-${sub.id}`;
+
+          const currentStatus = dayData.records
+            ? dayData.records[sub.id]
+            : null;
+
+          const header = document.createElement("div");
+          header.className = "subject-header";
+          header.onclick = () => window.toggleSubject(sub.id);
+
+          const info = document.createElement("div");
+          info.className = "subject-info";
+
+          const title = document.createElement("span");
+          title.className = "subject-title";
+          title.innerText = sub.name;
+
+          info.appendChild(title);
+
+          if (sub.time) {
+            const timeTag = document.createElement("span");
+            timeTag.className = "subject-time";
+            timeTag.innerText = "🕒 " + formatTime12Hr(sub.time);
+            info.appendChild(timeTag);
+          }
+
+          const badge = document.createElement("span");
+          badge.className = `badge ${currentStatus ? currentStatus.toLowerCase() : ""}`;
+          badge.innerText = currentStatus ? currentStatus : "Tap to mark ▾";
+
+          header.appendChild(info);
+          header.appendChild(badge);
+
+          const body = document.createElement("div");
+          body.className = "subject-body";
+
+          const btnGroup = document.createElement("div");
+          btnGroup.className = "btn-group";
+
+          const pBtn = document.createElement("button");
+          pBtn.className = `status-btn ${currentStatus === "Present" ? "active-present" : ""}`;
+          pBtn.innerText = "Present";
+          pBtn.disabled = isLocked;
+          pBtn.onclick = (e) => {
+            e.stopPropagation();
+            window.markAttendance(sub.id, "Present");
+          };
+
+          const aBtn = document.createElement("button");
+          aBtn.className = `status-btn ${currentStatus === "Absent" ? "active-absent" : ""}`;
+          aBtn.innerText = "Absent";
+          aBtn.disabled = isLocked;
+          aBtn.onclick = (e) => {
+            e.stopPropagation();
+            window.markAttendance(sub.id, "Absent");
+          };
+
+          btnGroup.appendChild(pBtn);
+          btnGroup.appendChild(aBtn);
+
+          body.appendChild(btnGroup);
+          item.appendChild(header);
+          item.appendChild(body);
+          listContainer.appendChild(item);
+        });
+      }
+
+      window.onload = () => {
+        renderCalendar();
+        initDatabaseSync();
+      };
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <!-- Left Column: Calendar View -->
+      <div class="card">
+        <div class="calendar-header">
+          <button onclick="changeMonth(-1)">&larr; Prev</button>
+          <h2 id="month-year-title">Month Year</h2>
+          <button onclick="changeMonth(1)">&rarr; Next</button>
+        </div>
+
+        <div class="calendar-grid" id="calendar-grid">
+          <!-- Generated Dynamically -->
+        </div>
+      </div>
+
+      <!-- Right Column: Subjects & Attendance -->
+      <div class="card">
+        <h3>Add Class to Schedule</h3>
+        <div class="add-subject-box">
+          <div class="input-row">
+            <input
+              type="text"
+              id="new-subject-input"
+              placeholder="Subject Name"
+            />
+            <input type="time" id="new-subject-time" />
+          </div>
+          <div class="input-row">
+            <select id="new-subject-day">
+              <option value="1">Every Monday</option>
+              <option value="2">Every Tuesday</option>
+              <option value="3">Every Wednesday</option>
+              <option value="4">Every Thursday</option>
+              <option value="5">Every Friday</option>
+              <option value="6">Every Saturday</option>
+              <option value="0">Every Sunday</option>
+            </select>
+            <button onclick="addSubject()">Add Subject</button>
+          </div>
+        </div>
+
+        <hr
+          style="margin: 20px 0; border: 0; border-top: 1px solid var(--border)"
+        />
+
+        <h3>Classes for <span id="selected-date-display"></span></h3>
+
+        <div id="subjects-list">
+          <!-- Dynamically rendered list -->
+        </div>
+
+        <div id="lock-banner" class="lock-banner">
+          🔒 ATTENDANCE LOCKED FOR THIS DAY
+        </div>
+
+        <button id="lock-btn" class="lock-btn" onclick="lockAttendance()">
+          Submit & Lock Attendance
+        </button>
+      </div>
+    </div>
+  </body>
+</html>
