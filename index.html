@@ -47,6 +47,10 @@
         padding: 20px;
         border-radius: 12px;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+      .full-width {
+        grid-column: 1 / -1;
       }
       h2,
       h3 {
@@ -93,8 +97,6 @@
         border: none;
         cursor: default;
       }
-
-      /* Calendar Status Coloring */
       .day-cell.status-locked {
         background-color: #dcfce7;
         border-color: var(--success);
@@ -141,6 +143,12 @@
         border-radius: 6px;
         cursor: pointer;
         font-weight: 600;
+      }
+      button.btn-secondary {
+        background: #6b7280;
+      }
+      button.btn-danger {
+        background: var(--danger);
       }
       button:disabled {
         opacity: 0.5;
@@ -190,6 +198,7 @@
       .btn-group {
         display: flex;
         gap: 8px;
+        margin-bottom: 8px;
       }
       .status-btn {
         flex: 1;
@@ -210,6 +219,17 @@
         background: var(--danger);
         color: white;
         border-color: var(--danger);
+      }
+
+      .manage-btn-group {
+        display: flex;
+        gap: 8px;
+        border-top: 1px dashed var(--border);
+        padding-top: 8px;
+      }
+      .manage-btn-group button {
+        padding: 6px 12px;
+        font-size: 0.75rem;
       }
 
       .badge {
@@ -247,6 +267,23 @@
         padding: 12px;
         font-size: 1rem;
       }
+
+      /* Review Table */
+      .review-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+      }
+      .review-table th,
+      .review-table td {
+        text-align: left;
+        padding: 10px;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.9rem;
+      }
+      .review-table th {
+        background: #f9fafb;
+      }
     </style>
 
     <!-- Firebase Web SDK v10 -->
@@ -259,7 +296,6 @@
         onValue,
       } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-      // Updated with your specific project keys and databaseURL
       const firebaseConfig = {
         apiKey: "AIzaSyDrbLCwPdnlzMaVaLMqSgExXLXOxZ7JsE4",
         authDomain: "calendar-tracker-4083b.firebaseapp.com",
@@ -279,6 +315,7 @@
       let selectedDateStr = formatDate(currentDate);
       let subjects = [];
       let attendanceData = {};
+      let editingSubjectId = null;
 
       function formatDate(d) {
         const year = d.getFullYear();
@@ -300,6 +337,7 @@
         selectedDateStr = dateStr;
         renderCalendar();
         renderSubjectsPanel();
+        renderWeeklyReview();
       };
 
       window.changeMonth = function (delta) {
@@ -312,6 +350,7 @@
         if (el) el.classList.toggle("open");
       };
 
+      // Add or Edit Subject
       window.addSubject = async function () {
         const nameInput = document.getElementById("new-subject-input");
         const timeInput = document.getElementById("new-subject-time");
@@ -319,23 +358,63 @@
 
         const name = nameInput.value.trim();
         const time = timeInput.value;
-        const dayOfWeek = parseInt(daySelect.value, 10); // 0=Sun, 1=Mon, ..., 6=Sat
+        const dayOfWeek = parseInt(daySelect.value, 10);
 
         if (!name) return;
 
-        const newSub = {
-          id: "sub_" + Date.now(),
-          name: name,
-          time: time || "",
-          dayOfWeek: dayOfWeek,
-        };
+        if (editingSubjectId) {
+          // Editing existing subject
+          const index = subjects.findIndex((s) => s.id === editingSubjectId);
+          if (index !== -1) {
+            subjects[index] = {
+              id: editingSubjectId,
+              name,
+              time: time || "",
+              dayOfWeek,
+            };
+          }
+          editingSubjectId = null;
+          document.getElementById("add-btn").innerText = "Add Subject";
+        } else {
+          // Creating new subject
+          const newSub = {
+            id: "sub_" + Date.now(),
+            name: name,
+            time: time || "",
+            dayOfWeek: dayOfWeek,
+          };
+          subjects.push(newSub);
+        }
 
-        subjects.push(newSub);
         nameInput.value = "";
         timeInput.value = "";
 
         await set(ref(db, "subjects"), subjects);
         renderSubjectsPanel();
+        renderWeeklyReview();
+      };
+
+      window.editSubject = function (subId) {
+        const sub = subjects.find((s) => s.id === subId);
+        if (!sub) return;
+
+        editingSubjectId = sub.id;
+        document.getElementById("new-subject-input").value = sub.name;
+        document.getElementById("new-subject-time").value = sub.time;
+        document.getElementById("new-subject-day").value = sub.dayOfWeek;
+
+        const addBtn = document.getElementById("add-btn");
+        addBtn.innerText = "Update Subject";
+        addBtn.scrollIntoView({ behavior: "smooth" });
+      };
+
+      window.deleteSubject = async function (subId) {
+        if (confirm("Are you sure you want to delete this subject?")) {
+          subjects = subjects.filter((s) => s.id !== subId);
+          await set(ref(db, "subjects"), subjects);
+          renderSubjectsPanel();
+          renderWeeklyReview();
+        }
       };
 
       window.markAttendance = async function (subjectId, status) {
@@ -350,7 +429,6 @@
 
         attendanceData[selectedDateStr].records[subjectId] = status;
 
-        // Save progress to Firebase
         await set(
           ref(db, `attendance/${selectedDateStr}`),
           attendanceData[selectedDateStr],
@@ -358,6 +436,7 @@
 
         renderSubjectsPanel();
         renderCalendar();
+        renderWeeklyReview();
       };
 
       window.lockAttendance = async function () {
@@ -382,6 +461,7 @@
           );
           renderSubjectsPanel();
           renderCalendar();
+          renderWeeklyReview();
         }
       };
 
@@ -389,12 +469,14 @@
         onValue(ref(db, "subjects"), (snapshot) => {
           subjects = snapshot.val() || [];
           renderSubjectsPanel();
+          renderWeeklyReview();
         });
 
         onValue(ref(db, "attendance"), (snapshot) => {
           attendanceData = snapshot.val() || {};
           renderCalendar();
           renderSubjectsPanel();
+          renderWeeklyReview();
         });
       }
 
@@ -456,7 +538,6 @@
         const listContainer = document.getElementById("subjects-list");
         listContainer.innerHTML = "";
 
-        // Get day of week for selected date (0 = Sunday, 1 = Monday, ..., 6 = Saturday)
         const parts = selectedDateStr.split("-");
         const selectedDayOfWeek = new Date(
           parts[0],
@@ -464,7 +545,6 @@
           parts[2],
         ).getDay();
 
-        // Filter subjects for THIS day of the week
         const filteredSubjects = subjects.filter(
           (s) => s.dayOfWeek === selectedDayOfWeek,
         );
@@ -493,7 +573,6 @@
           return;
         }
 
-        // Sort chronologically by time
         const sortedSubjects = [...filteredSubjects].sort((a, b) => {
           if (!a.time) return 1;
           if (!b.time) return -1;
@@ -509,7 +588,6 @@
             ? dayData.records[sub.id]
             : null;
 
-          // Subject Header
           const header = document.createElement("div");
           header.className = "subject-header";
           header.onclick = () => window.toggleSubject(sub.id);
@@ -520,7 +598,6 @@
           const title = document.createElement("span");
           title.className = "subject-title";
           title.innerText = sub.name;
-
           info.appendChild(title);
 
           if (sub.time) {
@@ -537,7 +614,6 @@
           header.appendChild(info);
           header.appendChild(badge);
 
-          // Subject Body
           const body = document.createElement("div");
           body.className = "subject-body";
 
@@ -565,11 +641,94 @@
           btnGroup.appendChild(pBtn);
           btnGroup.appendChild(aBtn);
 
+          // Edit / Delete Controls inside drawer
+          const manageGroup = document.createElement("div");
+          manageGroup.className = "manage-btn-group";
+
+          const editBtn = document.createElement("button");
+          editBtn.className = "btn-secondary";
+          editBtn.innerText = "✏️ Edit Class";
+          editBtn.onclick = (e) => {
+            e.stopPropagation();
+            window.editSubject(sub.id);
+          };
+
+          const delBtn = document.createElement("button");
+          delBtn.className = "btn-danger";
+          delBtn.innerText = "🗑️ Delete";
+          delBtn.onclick = (e) => {
+            e.stopPropagation();
+            window.deleteSubject(sub.id);
+          };
+
+          manageGroup.appendChild(editBtn);
+          manageGroup.appendChild(delBtn);
+
           body.appendChild(btnGroup);
+          body.appendChild(manageGroup);
+
           item.appendChild(header);
           item.appendChild(body);
           listContainer.appendChild(item);
         });
+      }
+
+      // Feature: Weekly Subject-wise Review
+      function renderWeeklyReview() {
+        const reviewContainer = document.getElementById("weekly-review-body");
+        if (!reviewContainer) return;
+
+        // Calculate the 7 days (Sunday - Saturday) of the selected date's week
+        const parts = selectedDateStr.split("-");
+        const targetDate = new Date(parts[0], parts[1] - 1, parts[2]);
+        const dayOfWeek = targetDate.getDay();
+
+        const weekStart = new Date(targetDate);
+        weekStart.setDate(targetDate.getDate() - dayOfWeek); // Go to Sunday
+
+        const weekDates = [];
+        for (let i = 0; i < 7; i++) {
+          const d = new Date(weekStart);
+          d.setDate(weekStart.getDate() + i);
+          weekDates.push(formatDate(d));
+        }
+
+        document.getElementById("review-week-range").innerText =
+          `${weekDates[0]} to ${weekDates[6]}`;
+
+        if (subjects.length === 0) {
+          reviewContainer.innerHTML = `<tr><td colspan="4" style="text-align:center; color:#6b7280;">No subjects added yet.</td></tr>`;
+          return;
+        }
+
+        let html = "";
+        subjects.forEach((sub) => {
+          let presentCount = 0;
+          let absentCount = 0;
+
+          weekDates.forEach((dStr) => {
+            const records = attendanceData[dStr]?.records;
+            if (records && records[sub.id]) {
+              if (records[sub.id] === "Present") presentCount++;
+              if (records[sub.id] === "Absent") absentCount++;
+            }
+          });
+
+          const total = presentCount + absentCount;
+          const percentage =
+            total > 0 ? Math.round((presentCount / total) * 100) : 0;
+
+          html += `
+            <tr>
+              <td><strong>${sub.name}</strong></td>
+              <td style="color: var(--success); font-weight: 600;">${presentCount}</td>
+              <td style="color: var(--danger); font-weight: 600;">${absentCount}</td>
+              <td><strong>${percentage}%</strong></td>
+            </tr>
+          `;
+        });
+
+        reviewContainer.innerHTML = html;
       }
 
       window.onload = () => {
@@ -595,7 +754,7 @@
 
       <!-- Right Column: Subjects & Attendance -->
       <div class="card">
-        <h3>Add Class to Schedule</h3>
+        <h3>Add / Edit Class Schedule</h3>
         <div class="add-subject-box">
           <div class="input-row">
             <input
@@ -615,7 +774,7 @@
               <option value="6">Every Saturday</option>
               <option value="0">Every Sunday</option>
             </select>
-            <button onclick="addSubject()">Add Subject</button>
+            <button id="add-btn" onclick="addSubject()">Add Subject</button>
           </div>
         </div>
 
@@ -626,7 +785,7 @@
         <h3>Classes for <span id="selected-date-display"></span></h3>
 
         <div id="subjects-list">
-          <!-- Dynamically rendered list for the selected day of the week -->
+          <!-- Dynamically rendered list -->
         </div>
 
         <div id="lock-banner" class="lock-banner">
@@ -636,6 +795,28 @@
         <button id="lock-btn" class="lock-btn" onclick="lockAttendance()">
           Submit & Lock Attendance
         </button>
+      </div>
+
+      <!-- Weekly Summary Card -->
+      <div class="card full-width">
+        <h3>📊 Weekly Subject Review</h3>
+        <p style="font-size: 0.85rem; color: #6b7280; margin-bottom: 10px">
+          Showing performance for week: <strong id="review-week-range"></strong>
+        </p>
+
+        <table class="review-table">
+          <thead>
+            <tr>
+              <th>Subject</th>
+              <th>Present</th>
+              <th>Absent</th>
+              <th>Attendance Rate</th>
+            </tr>
+          </thead>
+          <tbody id="weekly-review-body">
+            <!-- Dynamically Populated -->
+          </tbody>
+        </table>
       </div>
     </div>
   </body>
